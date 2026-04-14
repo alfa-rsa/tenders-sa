@@ -45,20 +45,28 @@ class Tender:
     @classmethod
     def from_api(cls, data: dict) -> "Tender":
         t = data.get("tender", {})
-        buyer = t.get("buyer", {})
         period = t.get("tenderPeriod", {})
         value = t.get("value", {})
-        cp = t.get("contactPerson", {})
 
+        # Extract contact from tender.contactPerson
         contacts = []
+        cp = t.get("contactPerson", {})
         if cp.get("name"):
             contacts.append(Contact(
                 name=cp["name"],
                 email=cp.get("email"),
-                phone=cp.get("telephone"),
-                fax=cp.get("fax"),
+                phone=cp.get("telephoneNumber"),
+                fax=cp.get("faxNumber"),
                 tender_ocid=data.get("ocid", ""),
             ))
+
+        # Pull first document URL if available
+        docs_url = ""
+        docs = t.get("documents", [])
+        if docs and isinstance(docs, list):
+            first_doc = docs[0]
+            if isinstance(first_doc, dict) and first_doc.get("url"):
+                docs_url = first_doc["url"]
 
         return cls(
             ocid=data.get("ocid", ""),
@@ -66,14 +74,15 @@ class Tender:
             description=t.get("description", ""),
             status=t.get("status", "unknown"),
             province=t.get("province", ""),
-            department=buyer.get("name", ""),
-            category=t.get("category", ""),
+            department=data.get("buyer", {}).get("name", ""),
+            category=t.get("mainProcurementCategory", ""),
             value_amount=float(value.get("amount", 0) or 0),
             value_currency=value.get("currency", "ZAR"),
             close_date=period.get("endDate", "")[:10] if period.get("endDate") else "",
             tender_period_start=period.get("startDate", "")[:10] if period.get("startDate") else "",
-            documents_url=data.get("documentsUrl", ""),
-            source_url=f"https://www.etenders.gov.za",
+            tender_period_end=period.get("endDate", "")[:10] if period.get("endDate") else "",
+            documents_url=docs_url,
+            source_url="https://www.etenders.gov.za",
             contacts=contacts,
         )
 

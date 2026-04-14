@@ -22,10 +22,10 @@ def track(tender_id, stage, notes, cache_db):
     cache = Cache(cache_db)
     tender = cache.get_tender(tender_id)
     if not tender:
-        click.echo(f"Tender {tender_id} not found in cache. Fetch it first.", err=True)
-        raise click.exit(1)
+        click.echo(f"Error: Tender '{tender_id}' not found in cache. Run `tenders new --fetch` first.", err=True)
+        raise SystemExit(1)
     cache.set_pipeline_stage(tender_id, stage, notes)
-    click.echo(f"✓ {tender.title[:60]}")
+    click.echo(f"✓ {tender.title[:70]}")
     click.echo(f"  Stage: {stage}")
 
 
