@@ -1,0 +1,22 @@
+# Cache
+cache.db
+*.db
+
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# uv
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
