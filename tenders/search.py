@@ -49,6 +49,8 @@ def search_tenders(
     category: Optional[str] = None,
     status: Optional[str] = "active",
     min_value: Optional[float] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     limit: int = 20,
 ) -> list[Tender]:
     """Search cached tenders with filters."""
@@ -59,8 +61,15 @@ def search_tenders(
         category=category,
         status=status,
         min_value=min_value,
+        date_from=date_from,
+        date_to=date_to,
         limit=limit,
     )
+
+
+def get_tender_by_ocid(cache: Cache, ocid: str) -> Optional[Tender]:
+    """Get a single tender by OCID from the cache."""
+    return cache.get_tender(ocid)
 
 
 def new_tenders(
@@ -97,7 +106,7 @@ def tender_history(
         department=department,
         category=category,
         status=None,
-        date_from=since,
+        since=since,
         limit=limit,
     )
 

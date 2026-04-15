@@ -59,7 +59,7 @@ def winners(department, category, since, limit, cache_db):
 
     for i, t in enumerate(past, 1):
         click.echo(f"{i}. {t['title'][:65]}")
-        click.echo(f"   🏛️  {t['department']}")
-        click.echo(f"   💰 R{t['value']:,.0f} | 📅 {t['close_date']}")
+        click.echo(f"   [D] {t['department']}")
+        click.echo(f"   R{t['value']:,.0f} | [D] {t['close_date']}")
         click.echo(f"   OCID: {t['ocid']}")
         click.echo("")

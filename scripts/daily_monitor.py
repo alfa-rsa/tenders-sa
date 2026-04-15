@@ -9,6 +9,8 @@ import datetime
 import os
 import sys
 
+import click
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from tenders.client import TenderClient
@@ -24,18 +26,18 @@ OPENCLAW_SESSION = os.getenv("OPENCLAW_SESSION", "main")
 def build_digest(tenders: list, watch_items: list) -> str:
     """Build WhatsApp digest text."""
     if not tenders:
-        return "📋 *tenders-sa Daily*\n\nNo new tenders matching your watchlist today. ✅"
+        return "[T] *tenders-sa Daily*\n\nNo new tenders matching your watchlist today. [OK]"
 
-    lines = [f"📋 *tenders-sa Daily Digest*\n{len(tenders)} new tender(s) found:\n"]
+    lines = [f"[T] *tenders-sa Daily Digest*\n{len(tenders)} new tender(s) found:\n"]
 
     for t in tenders[:10]:  # cap at 10
-        lines.append(f"📌 {t.title[:65]}")
+        lines.append(f"> {t.title[:65]}")
         if t.department:
-            lines.append(f"   🏛️ {t.department}")
+            lines.append(f"   [D] {t.department}")
         if t.province:
-            lines.append(f"   📍 {t.province}")
+            lines.append(f"   [L] {t.province}")
         if t.value_amount > 0:
-            lines.append(f"   💰 R{t.value_amount:,.0f}")
+            lines.append(f"   R{t.value_amount:,.0f}")
         if t.close_date:
             days_left = ""
             try:
@@ -45,10 +47,10 @@ def build_digest(tenders: list, watch_items: list) -> str:
                     days_left = f" (closes in {delta} days)"
             except Exception:
                 pass
-            lines.append(f"   ⏰ {t.close_date}{days_left}")
+            lines.append(f"   [C] {t.close_date}{days_left}")
         if t.contacts and t.contacts[0].email:
             c = t.contacts[0]
-            lines.append(f"   📧 {c.email}")
+            lines.append(f"   [E] {c.email}")
         lines.append("")
 
     if len(tenders) > 10:
@@ -72,7 +74,7 @@ def run():
         # First run — default to last 7 days
         date_from = (datetime.date.today() - datetime.timedelta(days=7)).isoformat()
         date_to = datetime.date.today().isoformat()
-        click.echo(f"First run — fetching last 7 days: {date_from} → {date_to}")
+        click.echo(f"First run - fetching last 7 days: {date_from} -> {date_to}")
 
     # Fetch from API
     client = TenderClient()
@@ -107,5 +109,4 @@ def run():
 
 
 if __name__ == "__main__":
-    import click
     run()

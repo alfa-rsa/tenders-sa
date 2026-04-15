@@ -1,16 +1,36 @@
-"""tenders search and tenders new commands."""
+"""tenders search, detail, and new commands."""
 
 import os
 import sys
-import json
 
 import click
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from tenders.client import TenderClient
 from tenders.cache import Cache
-from tenders.search import search_tenders, fetch_and_cache, new_tenders
-from tenders.contacts import format_tenders_text
+from tenders.search import search_tenders, fetch_and_cache, new_tenders, get_tender_by_ocid
+from tenders.contacts import format_tenders_text, format_tender_detail
+
+
+@click.command("detail")
+@click.argument("ocid")
+@click.option("--cache-db", default=os.getenv("TENDERS_DB_PATH", "./cache.db"), help="Path to cache DB")
+def detail(ocid, cache_db):
+    """Show full details for a specific tender by OCID.
+
+    Use this after searching to see all available information
+    about a tender: all documents, briefing sessions, delivery
+    location, procurement method, and more.
+    """
+    cache = Cache(cache_db)
+    tender = cache.get_tender(ocid)
+
+    if not tender:
+        click.echo(f"Error: Tender '{ocid}' not found in cache.", err=True)
+        click.echo("Run 'tenders new --fetch' first to populate the cache.", err=True)
+        raise SystemExit(1)
+
+    click.echo(format_tender_detail(tender))
 
 
 @click.command()
@@ -20,9 +40,12 @@ from tenders.contacts import format_tenders_text
 @click.option("-c", "--category", help="Category filter")
 @click.option("-s", "--status", default="active", help="Status filter (default: active)")
 @click.option("--min-value", type=float, help="Minimum tender value in ZAR")
+@click.option("--date-from", help="Close date from (YYYY-MM-DD)")
+@click.option("--date-to", help="Close date to (YYYY-MM-DD)")
 @click.option("--limit", default=20, help="Max results to return")
 @click.option("--cache-db", default=os.getenv("TENDERS_DB_PATH", "./cache.db"), help="Path to cache DB")
-def search(keyword, province, department, category, status, min_value, limit, cache_db):
+def search(keyword, province, department, category, status, min_value,
+           date_from, date_to, limit, cache_db):
     """Search cached tenders with filters."""
     cache = Cache(cache_db)
     tenders = search_tenders(
@@ -33,6 +56,8 @@ def search(keyword, province, department, category, status, min_value, limit, ca
         category=category,
         status=status,
         min_value=min_value,
+        date_from=date_from,
+        date_to=date_to,
         limit=limit,
     )
 
@@ -71,7 +96,7 @@ def new(keyword, province, since, limit, cache_db, fetch, date_from, date_to):
             from_date, to_date, client, cache,
             progress_callback=progress,
         )
-        click.echo(f"Done — fetched {total} tenders, {new_count} new.\n", err=True)
+        click.echo(f"Done - fetched {total} tenders, {new_count} new.\n", err=True)
 
     kws = " ".join(keyword) if keyword else None
     tenders = new_tenders(cache, days=int(since), keyword=kws, province=province)

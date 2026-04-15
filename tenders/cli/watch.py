@@ -19,7 +19,7 @@ def watch(keyword, province, category, min_value, cache_db):
     """Add a keyword to your watchlist."""
     cache = Cache(cache_db)
     cache.add_watch(keyword, province, category, min_value)
-    click.echo(f"✓ Watching: {keyword}")
+    click.echo(f"[OK] Watching: {keyword}")
     if province:
         click.echo(f"  Province: {province}")
     if category:
@@ -47,3 +47,13 @@ def watch_list(cache_db):
             click.echo(f"      Province: {item['province']}")
         if item["min_value"]:
             click.echo(f"      Min value: R{item['min_value']:,.0f}")
+
+
+@click.command("watch-remove")
+@click.option("--id", "watch_id", required=True, type=int, help="Watchlist entry ID to remove")
+@click.option("--cache-db", default=os.getenv("TENDERS_DB_PATH", "./cache.db"))
+def watch_remove(watch_id, cache_db):
+    """Remove a keyword from the watchlist."""
+    cache = Cache(cache_db)
+    cache.remove_watch(watch_id)
+    click.echo(f"[OK] Removed watch entry {watch_id}")

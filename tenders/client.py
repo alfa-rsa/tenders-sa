@@ -37,17 +37,18 @@ class TenderClient:
         date_to: str,
         page_number: int = 1,
         page_size: int = 20,
-        status: Optional[str] = None,
     ) -> dict:
         """
         Fetch releases from the eTenders OCDS API.
+
+        Note: status, category, buyer filters are silently ignored by the API.
+        All filtering happens in SQLite after fetching.
 
         Args:
             date_from: Start date YYYY-MM-DD
             date_to: End date YYYY-MM-DD
             page_number: 1-indexed page number
             page_size: Results per page (max ~100)
-            status: Optional filter (active, pending, complete, cancelled)
 
         Returns:
             API response dict with 'releases' list and pagination fields
@@ -60,8 +61,6 @@ class TenderClient:
             "dateFrom": date_from,
             "dateTo": date_to,
         }
-        if status:
-            params["status"] = status
 
         url = f"{self.base_url}/api/OCDSReleases"
         last_error = None
@@ -107,7 +106,6 @@ class TenderClient:
         date_to: str,
         page_size: int = 50,
         max_pages: Optional[int] = None,
-        status: Optional[str] = None,
         progress_callback=None,
     ) -> list[dict]:
         """
@@ -118,7 +116,6 @@ class TenderClient:
             date_to: End date
             page_size: Results per page
             max_pages: Cap on pages (None = until API says done)
-            status: Optional status filter
             progress_callback: fn(page_num, total_estimate) called each page
 
         Returns:
@@ -133,7 +130,6 @@ class TenderClient:
                 date_to=date_to,
                 page_number=page,
                 page_size=page_size,
-                status=status,
             )
             releases = data.get("releases", [])
             all_releases.extend(releases)

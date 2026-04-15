@@ -25,7 +25,7 @@ def track(tender_id, stage, notes, cache_db):
         click.echo(f"Error: Tender '{tender_id}' not found in cache. Run `tenders new --fetch` first.", err=True)
         raise SystemExit(1)
     cache.set_pipeline_stage(tender_id, stage, notes)
-    click.echo(f"✓ {tender.title[:70]}")
+    click.echo(f"[OK] {tender.title[:70]}")
     click.echo(f"  Stage: {stage}")
 
 
@@ -43,16 +43,16 @@ def pipeline(department, cache_db):
 
     for e in entries:
         stage_emoji = {
-            "Identified": "🔵",
-            "Briefing Registered": "🟡",
-            "Proposal Submitted": "🟠",
-            "Won": "🟢",
-            "Lost": "🔴",
-        }.get(e["stage"], "⚪")
+            "Identified": "[I]",
+            "Briefing Registered": "[B]",
+            "Proposal Submitted": "[P]",
+            "Won": "[W]",
+            "Lost": "[L]",
+        }.get(e["stage"], "[-]")
 
         click.echo(f"{stage_emoji} [{e['stage']}] {e.get('title', 'N/A')[:60]}")
-        click.echo(f"   🏛️  {e.get('department', 'N/A')}")
+        click.echo(f"   [D] {e.get('department', 'N/A')}")
         if e.get("close_date"):
-            click.echo(f"   ⏰ Closes: {e['close_date']}")
+            click.echo(f"   [C] Closes: {e['close_date']}")
         click.echo(f"   OCID: {e['tender_ocid']}")
         click.echo("")

@@ -20,7 +20,7 @@ def setup(cache_db):
 
     # Ensure DB is initialized
     cache = Cache(cache_db)
-    click.echo("✓ Cache DB initialized")
+    click.echo("[OK] Cache DB initialized")
 
     click.echo("\n--- Environment Variables ---")
     for var in ["ETENDERS_BASE_URL", "ETENDERS_TIMEOUT", "TENDERS_DB_PATH"]:
@@ -57,7 +57,7 @@ def stats(cache_db):
     if last:
         click.echo(f"\nLast fetch:")
         click.echo(f"  At:      {last['fetched_at']}")
-        click.echo(f"  Range:   {last['date_from']} → {last['date_to']}")
+        click.echo(f"  Range:   {last['date_from']} -> {last['date_to']}")
         click.echo(f"  Fetched: {last['tender_count']} tenders ({last['new_count']} new)")
         if last.get("error"):
             click.echo(f"  Error:   {last['error']}")

@@ -5,16 +5,59 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 from .models import Contact, Tender
 
 DEFAULT_DB_PATH = os.getenv("TENDERS_DB_PATH", "./cache.db")
 
+# Province alias expansion
+PROVINCE_ALIASES = {
+    "kzn": "KwaZulu-Natal",
+    "kwazulu-natal": "KwaZulu-Natal",
+    "kwazulu natal": "KwaZulu-Natal",
+    "natal": "KwaZulu-Natal",
+    "eastern cape": "Eastern Cape",
+    "ec": "Eastern Cape",
+    "western cape": "Western Cape",
+    "wc": "Western Cape",
+    "northern cape": "Northern Cape",
+    "nc": "Northern Cape",
+    "free state": "Free State",
+    "fs": "Free State",
+    "gauteng": "Gauteng",
+    "gt": "Gauteng",
+    "gp": "Gauteng",
+    "limpopo": "Limpopo",
+    "lp": "Limpopo",
+    "mpumalanga": "Mpumalanga",
+    "mp": "Mpumalanga",
+    "north west": "North West",
+    "nw": "North West",
+    "national": "National",
+}
+
+
+def normalize_province(province: str) -> str:
+    """Expand province aliases to canonical form."""
+    if not province:
+        return province or ""
+    key = province.lower().strip()
+    return PROVINCE_ALIASES.get(key, province)
+
 
 def _row_to_tender(row: sqlite3.Row) -> Tender:
     """Convert a DB row to a Tender object."""
+    # Deserialize documents JSON
+    docs_json = row["documents"]
+    if docs_json:
+        try:
+            docs = json.loads(docs_json)
+        except (json.JSONDecodeError, TypeError):
+            docs = []
+    else:
+        docs = []
+
     t = Tender(
         ocid=row["ocid"],
         title=row["title"],
@@ -23,12 +66,22 @@ def _row_to_tender(row: sqlite3.Row) -> Tender:
         province=row["province"],
         department=row["department"],
         category=row["category"],
+        category_detail=row["category_detail"] or "",
         value_amount=row["value_amount"] or 0.0,
         value_currency=row["value_currency"] or "ZAR",
         close_date=row["close_date"] or "",
         tender_period_start=row["tender_period_start"] or "",
         documents_url=row["documents_url"] or "",
+        documents=docs,
         source_url=row["source_url"] or "",
+        tender_id=row["tender_id"] or "",
+        procurement_method=row["procurement_method"] or "",
+        procurement_method_details=row["procurement_method_details"] or "",
+        delivery_location=row["delivery_location"] or "",
+        special_conditions=row["special_conditions"] or "",
+        briefing_session=bool(row["briefing_session"]),
+        briefing_date=row["briefing_date"] or "",
+        briefing_venue=row["briefing_venue"] or "",
         fetched_at=row["fetched_at"] or "",
     )
     return t
@@ -54,7 +107,7 @@ class Cache:
             conn.close()
 
     def _ensure_schema(self) -> None:
-        """Create tables if they don't exist."""
+        """Create tables if they don't exist, migrate if needed."""
         with self._conn() as conn:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS tenders (
@@ -65,12 +118,22 @@ class Cache:
                     province TEXT DEFAULT '',
                     department TEXT DEFAULT '',
                     category TEXT DEFAULT '',
+                    category_detail TEXT DEFAULT '',
                     value_amount REAL DEFAULT 0,
                     value_currency TEXT DEFAULT 'ZAR',
                     close_date TEXT DEFAULT '',
                     tender_period_start TEXT DEFAULT '',
                     documents_url TEXT DEFAULT '',
+                    documents TEXT DEFAULT '[]',
                     source_url TEXT DEFAULT '',
+                    tender_id TEXT DEFAULT '',
+                    procurement_method TEXT DEFAULT '',
+                    procurement_method_details TEXT DEFAULT '',
+                    delivery_location TEXT DEFAULT '',
+                    special_conditions TEXT DEFAULT '',
+                    briefing_session INTEGER DEFAULT 0,
+                    briefing_date TEXT DEFAULT '',
+                    briefing_venue TEXT DEFAULT '',
                     fetched_at TEXT NOT NULL
                 );
 
@@ -119,6 +182,25 @@ class Cache:
                 CREATE INDEX IF NOT EXISTS idx_contacts_tender ON contacts(tender_ocid);
             """)
 
+            # Migrate old schema: add missing columns if they don't exist
+            for col_def in [
+                ("category_detail", "TEXT DEFAULT ''"),
+                ("documents", "TEXT DEFAULT '[]'"),
+                ("tender_id", "TEXT DEFAULT ''"),
+                ("procurement_method", "TEXT DEFAULT ''"),
+                ("procurement_method_details", "TEXT DEFAULT ''"),
+                ("delivery_location", "TEXT DEFAULT ''"),
+                ("special_conditions", "TEXT DEFAULT ''"),
+                ("briefing_session", "INTEGER DEFAULT 0"),
+                ("briefing_date", "TEXT DEFAULT ''"),
+                ("briefing_venue", "TEXT DEFAULT ''"),
+            ]:
+                col_name, col_type = col_def
+                try:
+                    conn.execute(f"ALTER TABLE tenders ADD COLUMN {col_name} {col_type}")
+                except sqlite3.OperationalError:
+                    pass  # column already exists
+
     # ── Tender operations ──────────────────────────────────────────────
 
     def upsert_tender(self, tender: Tender) -> bool:
@@ -126,6 +208,7 @@ class Cache:
         Insert or update a tender. Returns True if it was new (not already cached).
         """
         is_new = False
+        docs_json = json.dumps(tender.documents) if tender.documents else "[]"
         with self._conn() as conn:
             cur = conn.execute(
                 "SELECT ocid FROM tenders WHERE ocid = ?", (tender.ocid,)
@@ -135,9 +218,12 @@ class Cache:
 
             conn.execute("""
                 INSERT INTO tenders (ocid, title, description, status, province,
-                    department, category, value_amount, value_currency, close_date,
-                    tender_period_start, documents_url, source_url, fetched_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    department, category, category_detail, value_amount, value_currency,
+                    close_date, tender_period_start, documents_url, documents, source_url,
+                    tender_id, procurement_method, procurement_method_details,
+                    delivery_location, special_conditions, briefing_session,
+                    briefing_date, briefing_venue, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(ocid) DO UPDATE SET
                     title=excluded.title,
                     description=excluded.description,
@@ -145,16 +231,29 @@ class Cache:
                     province=excluded.province,
                     department=excluded.department,
                     category=excluded.category,
+                    category_detail=excluded.category_detail,
                     value_amount=excluded.value_amount,
                     close_date=excluded.close_date,
                     tender_period_start=excluded.tender_period_start,
-                    documents_url=excluded.documents_url
+                    documents_url=excluded.documents_url,
+                    documents=excluded.documents,
+                    tender_id=excluded.tender_id,
+                    procurement_method=excluded.procurement_method,
+                    procurement_method_details=excluded.procurement_method_details,
+                    delivery_location=excluded.delivery_location,
+                    special_conditions=excluded.special_conditions,
+                    briefing_session=excluded.briefing_session,
+                    briefing_date=excluded.briefing_date,
+                    briefing_venue=excluded.briefing_venue
             """, (
                 tender.ocid, tender.title, tender.description, tender.status,
-                tender.province, tender.department, tender.category,
+                tender.province, tender.department, tender.category, tender.category_detail,
                 tender.value_amount, tender.value_currency, tender.close_date,
-                tender.tender_period_start, tender.documents_url,
-                tender.source_url, tender.fetched_at,
+                tender.tender_period_start, tender.documents_url, docs_json,
+                tender.source_url, tender.tender_id, tender.procurement_method,
+                tender.procurement_method_details, tender.delivery_location,
+                tender.special_conditions, int(tender.briefing_session),
+                tender.briefing_date, tender.briefing_venue, tender.fetched_at,
             ))
 
             for contact in tender.contacts:
@@ -220,21 +319,26 @@ class Cache:
         params = []
 
         if keyword:
-            conditions.append("(title LIKE ? OR description LIKE ? OR category LIKE ?)")
+            conditions.append(
+                "(title LIKE ? OR description LIKE ? OR category LIKE ? OR category_detail LIKE ?)"
+            )
             kw = f"%{keyword}%"
-            params.extend([kw, kw, kw])
+            params.extend([kw, kw, kw, kw])
 
         if province:
+            # Expand aliases so "KZN" matches "KwaZulu-Natal" stored in DB
+            canonical = normalize_province(province)
             conditions.append("province LIKE ?")
-            params.append(f"%{province}%")
+            params.append(f"%{canonical}%")
 
         if department:
             conditions.append("department LIKE ?")
             params.append(f"%{department}%")
 
         if category:
-            conditions.append("category LIKE ?")
-            params.append(f"%{category}%")
+            conditions.append("(category LIKE ? OR category_detail LIKE ?)")
+            cat = f"%{category}%"
+            params.extend([cat, cat])
 
         if status:
             conditions.append("status = ?")
@@ -303,8 +407,9 @@ class Cache:
             params.extend([kw, kw])
 
         if province:
+            canonical = normalize_province(province)
             sql += " AND t.province LIKE ?"
-            params.append(f"%{province}%")
+            params.append(f"%{canonical}%")
 
         if department:
             sql += " AND t.department LIKE ?"
